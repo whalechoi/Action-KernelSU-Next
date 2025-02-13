@@ -22,6 +22,11 @@ on:
         description: "内核版本"
         required: true
         default: '6.1'
+      THIN_LTO:
+        description: "Thin LTO"
+        required: true
+        type: boolean
+        default: false
       KSUNEXT_ENABLED:
         description: "添加 KSU Next"
         required: true
@@ -119,10 +124,17 @@ jobs:
            #patch -p1 -F 3 < selinux.c_fix.patch
            
       - name: Build kernel
+        if: github.event.inputs.THIN_LTO == 'false'
         run: |
          cd kernel_workspace
          ./kernel_platform/oplus/build/oplus_build_kernel.sh ${{ github.event.inputs.CPUD }} gki
-         
+
+      - name: Build kernel Thin Lto
+        if: github.event.inputs.THIN_LTO == 'true'
+        run: |
+         cd kernel_workspace
+         LTO=thin ./kernel_platform/oplus/build/oplus_build_kernel.sh ${{ github.event.inputs.CPUD }} gki
+
       - name: Make AnyKernel3
         run: |
          git clone https://github.com/Kernel-SU/AnyKernel3 --depth=1

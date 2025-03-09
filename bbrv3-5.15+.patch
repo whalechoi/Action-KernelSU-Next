@@ -1,0 +1,133 @@
+diff -ruN a/include/net/inet_connection_sock.h b/include/net/inet_connection_sock.h
+--- a/include/net/inet_connection_sock.h	2025-03-01 12:40:12.376118275 -0500
++++ b/include/net/inet_connection_sock.h	2025-03-01 12:44:43.018064953 -0500
+@@ -139,8 +139,8 @@
+ 
+ 	ANDROID_KABI_RESERVE(1);
+ 
+-	u64			  icsk_ca_priv[104 / sizeof(u64)];
+-#define ICSK_CA_PRIV_SIZE	  sizeof_field(struct inet_connection_sock, icsk_ca_priv)
++#define ICSK_CA_PRIV_SIZE      (144)
++	u64			  icsk_ca_priv[ICSK_CA_PRIV_SIZE / sizeof(u64)];
+ };
+ 
+ #define ICSK_TIME_RETRANS	1	/* Retransmit timer */
+diff -ruN a/include/uapi/linux/inet_diag.h b/include/uapi/linux/inet_diag.h
+--- a/include/uapi/linux/inet_diag.h	2025-03-01 12:40:12.596106429 -0500
++++ b/include/uapi/linux/inet_diag.h	2025-03-01 12:46:53.308293378 -0500
+@@ -229,6 +229,32 @@
+ 	__u32	bbr_min_rtt;		/* min-filtered RTT in uSec */
+ 	__u32	bbr_pacing_gain;	/* pacing gain shifted left 8 bits */
+ 	__u32	bbr_cwnd_gain;		/* cwnd gain shifted left 8 bits */
++	__u32	bbr_bw_hi_lsb;		/* lower 32 bits of bw_hi */
++	__u32	bbr_bw_hi_msb;		/* upper 32 bits of bw_hi */
++	__u32	bbr_bw_lo_lsb;		/* lower 32 bits of bw_lo */
++	__u32	bbr_bw_lo_msb;		/* upper 32 bits of bw_lo */
++	__u8	bbr_mode;		/* current bbr_mode in state machine */
++	__u8	bbr_phase;		/* current state machine phase */
++	__u8	unused1;		/* alignment padding; not used yet */
++	__u8	bbr_version;		/* BBR algorithm version */
++	__u32	bbr_inflight_lo;	/* lower short-term data volume bound */
++	__u32	bbr_inflight_hi;	/* higher long-term data volume bound */
++	__u32	bbr_extra_acked;	/* max excess packets ACKed in epoch */
++};
++
++/* TCP BBR congestion control bbr_phase as reported in netlink/ss stats. */
++
++
++
++enum tcp_bbr_phase {
++	BBR_PHASE_INVALID		= 0,
++	BBR_PHASE_STARTUP		= 1,
++	BBR_PHASE_DRAIN			= 2,
++	BBR_PHASE_PROBE_RTT		= 3,
++	BBR_PHASE_PROBE_BW_UP		= 4,
++	BBR_PHASE_PROBE_BW_DOWN		= 5,
++	BBR_PHASE_PROBE_BW_CRUISE	= 6,
++	BBR_PHASE_PROBE_BW_REFILL	= 7,
+ };
+ 
+ union tcp_cc_info {
+diff --color -uprN a/net/ipv4/Kconfig b/net/ipv4/Kconfig
+--- a/net/ipv4/Kconfig	2025-03-09 22:59:28.519205832 +0800
++++ b/net/ipv4/Kconfig	2025-03-09 23:10:56.595205570 +0800
+@@ -468,6 +468,7 @@ config INET_DIAG_DESTROY
+ 
+ menuconfig TCP_CONG_ADVANCED
+ 	bool "TCP: advanced congestion control"
++	default y
+ 	help
+ 	  Support for selection of various TCP congestion control
+ 	  modules.
+@@ -481,7 +482,7 @@ if TCP_CONG_ADVANCED
+ 
+ config TCP_CONG_BIC
+ 	tristate "Binary Increase Congestion (BIC) control"
+-	default m
++	default n
+ 	help
+ 	  BIC-TCP is a sender-side only change that ensures a linear RTT
+ 	  fairness under large windows while offering both scalability and
+@@ -503,7 +504,7 @@ config TCP_CONG_CUBIC
+ 
+ config TCP_CONG_WESTWOOD
+ 	tristate "TCP Westwood+"
+-	default m
++	default n
+ 	help
+ 	  TCP Westwood+ is a sender-side only modification of the TCP Reno
+ 	  protocol stack that optimizes the performance of TCP congestion
+@@ -517,7 +518,7 @@ config TCP_CONG_WESTWOOD
+ 
+ config TCP_CONG_HTCP
+ 	tristate "H-TCP"
+-	default m
++	default n
+ 	help
+ 	  H-TCP is a send-side only modifications of the TCP Reno
+ 	  protocol stack that optimizes the performance of TCP
+@@ -665,7 +666,7 @@ config TCP_CONG_CDG
+ 
+ config TCP_CONG_BBR
+ 	tristate "BBR TCP"
+-	default n
++	default y
+ 	help
+ 
+ 	  BBR (Bottleneck Bandwidth and RTT) TCP congestion control aims to
+@@ -680,7 +681,7 @@ config TCP_CONG_BBR
+ 
+ choice
+ 	prompt "Default TCP congestion control"
+-	default DEFAULT_CUBIC
++	default DEFAULT_BBR
+ 	help
+ 	  Select the TCP congestion control that will be used by default
+ 	  for all connections.
+diff --color -uprN a/net/sched/Kconfig b/net/sched/Kconfig
+--- a/net/sched/Kconfig	2025-03-09 23:02:19.287205767 +0800
++++ b/net/sched/Kconfig	2025-03-09 23:52:48.459204612 +0800
+@@ -441,6 +441,7 @@ config NET_SCH_ETS
+ 
+ menuconfig NET_SCH_DEFAULT
+ 	bool "Allow override default queue discipline"
++	default y
+ 	help
+ 	  Support for selection of default queuing discipline.
+ 
+@@ -454,13 +455,13 @@ if NET_SCH_DEFAULT
+ 
+ choice
+ 	prompt "Default queuing discipline"
+-	default DEFAULT_PFIFO_FAST
++	default DEFAULT_FQ
+ 	help
+ 	  Select the queueing discipline that will be used by default
+ 	  for all network devices.
+ 
+ 	config DEFAULT_FQ
+-		bool "Fair Queue" if NET_SCH_FQ
++		bool "Fair Queue"
+ 
+ 	config DEFAULT_CODEL
+ 		bool "Controlled Delay" if NET_SCH_CODEL

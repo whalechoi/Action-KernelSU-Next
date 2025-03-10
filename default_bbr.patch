@@ -1,0 +1,70 @@
+diff -uprN a/net/ipv4/Kconfig b/net/ipv4/Kconfig
+--- a/net/ipv4/Kconfig	2025-03-10 13:38:56.900373000 +0800
++++ b/net/ipv4/Kconfig	2025-03-10 13:33:54.594252900 +0800
+@@ -468,6 +468,7 @@ config INET_DIAG_DESTROY
+ 
+ menuconfig TCP_CONG_ADVANCED
+ 	bool "TCP: advanced congestion control"
++	default y
+ 	help
+ 	  Support for selection of various TCP congestion control
+ 	  modules.
+@@ -481,7 +482,7 @@ if TCP_CONG_ADVANCED
+ 
+ config TCP_CONG_BIC
+ 	tristate "Binary Increase Congestion (BIC) control"
+-	default m
++	default n
+ 	help
+ 	  BIC-TCP is a sender-side only change that ensures a linear RTT
+ 	  fairness under large windows while offering both scalability and
+@@ -503,7 +504,7 @@ config TCP_CONG_CUBIC
+ 
+ config TCP_CONG_WESTWOOD
+ 	tristate "TCP Westwood+"
+-	default m
++	default n
+ 	help
+ 	  TCP Westwood+ is a sender-side only modification of the TCP Reno
+ 	  protocol stack that optimizes the performance of TCP congestion
+@@ -517,7 +518,7 @@ config TCP_CONG_WESTWOOD
+ 
+ config TCP_CONG_HTCP
+ 	tristate "H-TCP"
+-	default m
++	default n
+ 	help
+ 	  H-TCP is a send-side only modifications of the TCP Reno
+ 	  protocol stack that optimizes the performance of TCP
+@@ -665,7 +666,7 @@ config TCP_CONG_CDG
+ 
+ config TCP_CONG_BBR
+ 	tristate "BBR TCP"
+-	default n
++	default y
+ 	help
+ 
+ 	  BBR (Bottleneck Bandwidth and RTT) TCP congestion control is a
+@@ -683,7 +684,7 @@ config TCP_CONG_BBR
+ 
+ choice
+ 	prompt "Default TCP congestion control"
+-	default DEFAULT_CUBIC
++	default DEFAULT_BBR
+ 	help
+ 	  Select the TCP congestion control that will be used by default
+ 	  for all connections.
+diff -uprN a/net/ipv4/tcp_bbr.c b/net/ipv4/tcp_bbr.c
+--- a/net/ipv4/tcp_bbr.c	2025-03-11 00:14:28.271666500 +0800
++++ b/net/ipv4/tcp_bbr.c	2025-03-11 00:22:14.260788700 +0800
+@@ -69,6 +69,10 @@
+ #include <trace/events/tcp.h>
+ #include "tcp_dctcp.h"
+ 
++#ifdef CONFIG_CC_IS_CLANG
++#pragma clang diagnostic ignored "-Wconstant-logical-operand"
++#endif
++
+ #define BBR_VERSION		3
+ 
+ #define bbr_param(sk,name)	(bbr_ ## name)

@@ -22,16 +22,21 @@ on:
         description: "内核版本"
         required: true
         default: '6.1'
+      THIN_LTO:
+        description: "Thin LTO"
+        required: true
+        type: boolean
+        default: false
       KSUNEXT_ENABLED:
         description: "添加 KSU Next"
         required: true
         type: boolean
-        default: false
+        default: true
       SUSFS_ENABLED:
         description: "添加 SUSFS"
         required: true
         type: boolean
-        default: false
+        default: true
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -41,7 +46,7 @@ jobs:
         uses: easimon/maximize-build-space@master
         with:
           root-reserve-mb: 8192
-          temp-reserve-mb: 2048
+          temp-reserve-mb: 8192
           remove-dotnet: 'true'
           remove-android: 'true'
           remove-haskell: 'true'
@@ -81,46 +86,76 @@ jobs:
          cd KernelSU-Next
          KSU_VERSION=$(expr $(/usr/bin/git rev-list --count HEAD) "+" 10200)
          echo "KSUVER=$KSU_VERSION" >> $GITHUB_ENV
-         sed -i "s/DKSU_VERSION=16/DKSU_VERSION=${KSU_VERSION}/" kernel/Makefile
+         sed -i "s/DKSU_VERSION=11998/DKSU_VERSION=${KSU_VERSION}/" kernel/Makefile
         
       - name: Set up susfs
         if: github.event.inputs.SUSFS_ENABLED == 'true'
         run: |
            cd kernel_workspace
            git clone https://gitlab.com/simonpunk/susfs4ksu.git -b gki-${{ github.event.inputs.ANDROID_VERSION }}-${{ github.event.inputs.KERNEL_VERSION }}
+           cd susfs4ksu && git reset --hard 3acdf537 && cd ..
            git clone https://github.com/TheWildJames/kernel_patches.git
+           git clone https://gitlab.com/xanmod/linux-patches.git
+           git clone https://github.com/whalechoi/Action-KernelSU-Next.git
            cd kernel_platform
-           cp ../susfs4ksu/kernel_patches/KernelSU/10_enable_susfs_for_ksu.patch ./KernelSU-Next/
            cp ../susfs4ksu/kernel_patches/50_add_susfs_in_gki-${{ github.event.inputs.ANDROID_VERSION }}-${{ github.event.inputs.KERNEL_VERSION }}.patch ./common/
            cp ../susfs4ksu/kernel_patches/fs/* ./common/fs/
            cp ../susfs4ksu/kernel_patches/include/linux/* ./common/include/linux/
 
-           # Apply patches
            cd ./KernelSU-Next
-           patch -p1 --forward < 10_enable_susfs_for_ksu.patch || true
+           # KSU Next
+           cp ../../kernel_patches/next/0001-kernel-patch-susfs-v1.5.5-to-KernelSU-Next-v1.0.5.patch ./
+           patch -p1 < 0001-kernel-patch-susfs-v1.5.5-to-KernelSU-Next-v1.0.5.patch || true
+
            cd ../common
+           # SUSFS
            patch -p1 < 50_add_susfs_in_gki-${{ github.event.inputs.ANDROID_VERSION }}-${{ github.event.inputs.KERNEL_VERSION }}.patch || true
+           # STUFF Hide
            cp ../../kernel_patches/69_hide_stuff.patch ./
            patch -p1 -F 3 < 69_hide_stuff.patch
-           git add -A && git commit -a -m "BUILD Kernel"
+           # BBRv3
+           cp ../../linux-patches/eol/linux-6.1.y-xanmod/net/tcp/bbr3/* ./
+           cp ../../linux-patches/eol/linux-6.1.y-xanmod/net/tcp/plb/* ./
+           cp ../../Action-KernelSU-Next/default_bbr.patch ./
+           patch -p1 -F 3 < 0001-net-tcp_bbr-broaden-app-limited-rate-sample-detectio.patch 
+           patch -p1 -F 3 < 0002-net-tcp_bbr-v2-shrink-delivered_mstamp-first_tx_msta.patch 
+           patch -p1 -F 3 < 0003-net-tcp_bbr-v2-snapshot-packets-in-flight-at-transmi.patch 
+           patch -p1 -F 3 < 0004-net-tcp_bbr-v2-count-packets-lost-over-TCP-rate-samp.patch 
+           patch -p1 -F 3 < 0005-net-tcp_bbr-v2-export-FLAG_ECE-in-rate_sample.is_ece.patch 
+           patch -p1 -F 3 < 0006-net-tcp_bbr-v2-introduce-ca_ops-skb_marked_lost-CC-m.patch 
+           patch -p1 -F 3 < 0007-net-tcp_bbr-v2-adjust-skb-tx.in_flight-upon-merge-in.patch 
+           patch -p1 -F 3 < 0008-net-tcp_bbr-v2-adjust-skb-tx.in_flight-upon-split-in.patch 
+           patch -p1 -F 3 < 0009-net-tcp-add-new-ca-opts-flag-TCP_CONG_WANTS_CE_EVENT.patch 
+           patch -p1 -F 3 < 0010-net-tcp-re-generalize-TSO-sizing-in-TCP-CC-module-AP.patch 
+           patch -p1 -F 3 < 0011-net-tcp-add-fast_ack_mode-1-skip-rwin-check-in-tcp_f.patch 
+           patch -p1 -F 3 < 0012-net-tcp_bbr-v2-record-app-limited-status-of-TLP-repa.patch 
+           patch -p1 -F 3 < 0013-net-tcp_bbr-v2-inform-CC-module-of-losses-repaired-b.patch 
+           patch -p1 -F 3 < 0014-net-tcp_bbr-v2-introduce-is_acking_tlp_retrans_seq-i.patch 
+           patch -p1 -F 3 < 0015-tcp-introduce-per-route-feature-RTAX_FEATURE_ECN_LOW.patch 
+           patch -p1 -F 3 < 0016-net-tcp_bbr-v3-update-TCP-bbr-congestion-control-mod.patch 
+           patch -p1 -F 3 < 0017-net-tcp_bbr-v3-ensure-ECN-enabled-BBR-flows-set-ECT-.patch 
+           patch -p1 -F 3 < 0018-tcp-export-TCPI_OPT_ECN_LOW-in-tcp_info-tcpi_options.patch
+           patch -p1 -F 3 < 0001-tcp-add-sysctls-for-TCP-PLB-parameters.patch
+           patch -p1 -F 3 < 0002-tcp-add-PLB-functionality-for-TCP.patch
+           patch -p1 -F 3 < default_bbr.patch
+
+           # commit
+           cd ../common && git add -A && git commit -a -m "BUILD Kernel"
+           cd ../msm-kernel && git add -A && git commit -a -m "BUILD Kernel"
            cd ..
-           cd ./msm-kernel && git add -A && git commit -a -m "BUILD Kernel"
-           cd ..
-             
-           cp ../kernel_patches/apk_sign.c_fix.patch ./
-           patch -p1 -F 3 < apk_sign.c_fix.patch
-             
-           cp ../kernel_patches/core_hook.c_fix.patch ./
-           patch -p1 --fuzz=3 < ./core_hook.c_fix.patch
-           
-           cp ../kernel_patches/selinux.c_fix.patch ./
-           patch -p1 -F 3 < selinux.c_fix.patch
            
       - name: Build kernel
+        if: github.event.inputs.THIN_LTO == 'false'
         run: |
          cd kernel_workspace
          ./kernel_platform/oplus/build/oplus_build_kernel.sh ${{ github.event.inputs.CPUD }} gki
-         
+
+      - name: Build kernel Thin Lto
+        if: github.event.inputs.THIN_LTO == 'true'
+        run: |
+         cd kernel_workspace
+         LTO=thin ./kernel_platform/oplus/build/oplus_build_kernel.sh ${{ github.event.inputs.CPUD }} gki
+
       - name: Make AnyKernel3
         run: |
          git clone https://github.com/Kernel-SU/AnyKernel3 --depth=1

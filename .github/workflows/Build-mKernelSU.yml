@@ -101,8 +101,8 @@ jobs:
 
            cd ./KernelSU
            # mKSU
-           cp ../../Action-KernelSU-Next/0002-kernel-patch-susfs-v1.5.5-to-mKernelSU.patch ./
-           patch -p1 < 0002-kernel-patch-susfs-v1.5.5-to-mKernelSU.patch || true
+           cp ../../Action-KernelSU-Next/0002-kernel-patch-susfs-v1.5.7-to-mKernelSU.patch ./
+           patch -p1 < 0002-kernel-patch-susfs-v1.5.7-to-mKernelSU.patch || true
 
            cd ../common
            # SUSFS
